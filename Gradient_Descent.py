@@ -6,6 +6,7 @@ import time
 import cupy as cp
 from matplotlib import rc
 from PIL import Image
+import sys, getopt
 
 
 def f_vec(x, W, a):
@@ -13,7 +14,6 @@ def f_vec(x, W, a):
 
 
 def initialize(m, n, d):
-    cp.random.seed(3)
     W = cp.random.normal(size=(m, d))
     y = cp.random.normal(size=n)
     a = 2*cp.around(cp.random.uniform(size=m))-cp.ones(m)
@@ -38,10 +38,10 @@ def load_weights(model):
       npz["ny"], npz["n"], npz["d"])
 
 
-def plot_fig(loss_k, epochs, m, pattern_change, max_dist, least_eig, n, d):
+def plot_fig(loss_k, epochs, m, pattern_change, max_dist, least_eig, n, d,save_fig):
     loss_k, pattern_change, max_dist, least_eig, epochs, m = cp.asnumpy(loss_k),\
     cp.asnumpy(pattern_change), cp.asnumpy(max_dist), cp.asnumpy(least_eig), cp.asnumpy(epochs), cp.asnumpy(m)
-    dpi, save_figure = 300, "yes"
+    dpi = 300
     for i in range(1, len(m)):
         norm_const = 1+(-loss_k[0, 0] + loss_k[0, i])/loss_k[0, 0]
         loss_k[:, i] = loss_k[:, i]/norm_const
@@ -72,7 +72,7 @@ def plot_fig(loss_k, epochs, m, pattern_change, max_dist, least_eig, n, d):
         else:
             plt.xticks([0, 50, 100, 150, 200], ["0", "50", "100", "150", "200"])
     plt.show()
-    if save_figure == "yes":
+    if save_fig == "yes":
         name1 = "Thesis" + str(np.datetime64("now"))+".png"
         fig.savefig(name1, format="png", dpi=dpi)
 
@@ -135,30 +135,40 @@ def create_H_vec_cp(x, W):
     return H /W.shape[0]
 
 
-def main():
-    n, d, epochs, ny, seed_nr, save_weights, plt_fig, m = 100, 1000, 200, 3, 14, "yes", "yes", [200, 400, 800, 1600, 3200]
-    cp.random.seed(seed_nr)
-    loss_k, pattern_change, max_dist, least_eig = cp.zeros((4, epochs+1, len(m)))
-    epoch_vec = cp.arange(epochs+1)
-    time_all()
+def iterate(epochs, m, n, d, ny,verbose=0):
+    loss_k, pattern_change, max_dist, least_eig = cp.zeros((4, epochs + 1, len(m)))
     for i in range(len(m)):
         x, W, a, y = initialize(m[i], n, d)
         for k in range(epochs+1):
-            print("epoch "+str(k)+"/"+str(epochs)+" in round"+str(i))
+            if verbose==1:
+               print("epoch "+str(k)+"/"+str(epochs)+" in round"+str(i))
             if k == 0:
                 W_0 = W
             else:
                 diff = gradient_step_vec(x, W, a, y, ny)
                 W = W + diff
-
             pattern_change[k, i],loss_k[k, i] = pattern_changes_vec(W, W_0, x), loss_vec(x, W, a, y)
             max_dist[k, i], least_eig[k, i] = max_distance_vec(W, W_0), H_ev_vec(x, W)
+    return loss_k, pattern_change, max_dist, least_eig
+
+
+def main():
+
+    n, d, epochs, ny, seed_nr, m = 100, 1000, 200, 3, 14, [200, 400, 800, 1600, 3200]
+    save_weights, plt_fig, save_fig, timer,verbose = "no", "no", "no", "no", 0
+    cp.random.seed(seed_nr)
+    epoch_vec = cp.arange(epochs + 1)
+
+    if timer =="yes":
+        time_all()
+    loss_k, pattern_change, max_dist, least_eig = iterate(epochs, m, n, d, ny,verbose)
+
     if save_weights == "yes":
         cp.savez("Model"+str(np.datetime64("now")), loss_k=loss_k, epoch_vec=epoch_vec, m=m,
                  pattern_change=pattern_change, max_dist=max_dist,
                  least_eig=least_eig, ny=ny, n=n, d=d, seed_nr=seed_nr)
     if plt_fig == "yes":
-        plot_fig(loss_k, epoch_vec, m, pattern_change, max_dist, least_eig, n, d)
+        plot_fig(loss_k, epoch_vec, m, pattern_change, max_dist, least_eig, n, d,save_fig)
 
 
 if __name__ == "__main__":
